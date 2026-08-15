@@ -1,0 +1,8 @@
+# Downloaded binaries / installers (never commit these)
+kubectl
+minikube-linux-amd64
+*.sha256
+
+# OS / editor noise
+.DS_Store
+*.swp
