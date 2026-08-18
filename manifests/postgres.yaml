@@ -21,11 +21,17 @@ spec:
             - containerPort: 5432
           env:
             - name: POSTGRES_USER
-              value: "app_user"
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: POSTGRES_DB
             - name: POSTGRES_PASSWORD
               value: "devpassword123"
-            - name: POSTGRES_DB
-              value: "app_db"
 ---
 apiVersion: v1
 kind: Service

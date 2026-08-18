@@ -21,16 +21,44 @@ spec:
           ports:
             - containerPort: 8000
           env:
-            - name: DATABASE_URL
-              value: "postgresql+asyncpg://app_user:devpassword123@postgres:5432/app_db"
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: POSTGRES_DB
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: LOG_LEVEL
+            - name: ACCESS_TOKEN_EXPIRE_MINUTES
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ACCESS_TOKEN_EXPIRE_MINUTES
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: REDIS_URL
+            - name: CACHE_TTL_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: CACHE_TTL_SECONDS
+
+            - name: POSTGRES_PASSWORD
+              value: "devpassword123"
             - name: JWT_SECRET_KEY
               value: "dev_only_secret_change_me"
-            - name: ACCESS_TOKEN_EXPIRE_MINUTES
-              value: "30"
-            - name: REDIS_URL
-              value: "redis://redis:6379/0"
-            - name: CACHE_TTL_SECONDS
-              value: "60"
+
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
 ---
 apiVersion: v1
 kind: Service
