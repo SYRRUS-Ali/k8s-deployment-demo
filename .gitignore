@@ -6,3 +6,5 @@ minikube-linux-amd64
 # OS / editor noise
 .DS_Store
 *.swp
+
+manifests/secret.yaml

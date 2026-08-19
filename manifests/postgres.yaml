@@ -31,7 +31,10 @@ spec:
                   name: app-config
                   key: POSTGRES_DB
             - name: POSTGRES_PASSWORD
-              value: "devpassword123"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: POSTGRES_PASSWORD
 ---
 apiVersion: v1
 kind: Service

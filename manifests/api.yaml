@@ -53,9 +53,15 @@ spec:
                   key: CACHE_TTL_SECONDS
 
             - name: POSTGRES_PASSWORD
-              value: "devpassword123"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: POSTGRES_PASSWORD
             - name: JWT_SECRET_KEY
-              value: "dev_only_secret_change_me"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: JWT_SECRET_KEY
 
             - name: DATABASE_URL
               value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
