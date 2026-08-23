@@ -2,6 +2,12 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: api
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/instance: k8s-deployment-demo
+    app.kubernetes.io/part-of: k8s-deployment-demo
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/managed-by: kubectl
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

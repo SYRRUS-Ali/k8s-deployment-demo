@@ -7,4 +7,5 @@ minikube-linux-amd64
 .DS_Store
 *.swp
 
-manifests/secret.yamlcerts/
+manifests/secret.yaml
+certs/

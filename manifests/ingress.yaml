@@ -2,6 +2,12 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: api
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/instance: k8s-deployment-demo
+    app.kubernetes.io/part-of: k8s-deployment-demo
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/managed-by: kubectl
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
