@@ -1,10 +1,11 @@
 # k8s-deployment-demo
 
 [![Kubernetes](https://img.shields.io/badge/kubernetes-ready-326CE5.svg?logo=kubernetes&logoColor=white)](https://kubernetes.io/)
+[![Helm](https://img.shields.io/badge/helm-chart-0F1689.svg?logo=helm&logoColor=white)](https://helm.sh/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
-A production-style Kubernetes deployment of [`compose-multiservice-app`](https://github.com/SYRRUS-Ali/compose-multiservice-app) — evolving a Docker Compose stack into a Kubernetes setup with externalized configuration, health checks, autoscaling, and TLS-terminated ingress.
+A production-style Kubernetes deployment of [`compose-multiservice-app`](https://github.com/SYRRUS-Ali/compose-multiservice-app) — evolving a Docker Compose stack into a Kubernetes setup with externalized configuration, health checks, autoscaling, TLS-terminated ingress, and Helm packaging.
 
 > 🚧 **Status: in progress.** Built incrementally, one real commit per day, as
 > part of a structured DevSecOps portfolio sprint. See [Roadmap](#roadmap)
@@ -29,16 +30,17 @@ A production-style Kubernetes deployment of [`compose-multiservice-app`](https:/
 
 ## What this deploys
 
-Two workloads on a local [minikube](https://minikube.sigs.k8s.io/) cluster:
+Two workloads on a local [minikube](https://minikube.sigs.k8s.io/) cluster,
+packaged as a single [Helm](https://helm.sh/) chart:
 
 - **`api`** — the FastAPI service from `compose-multiservice-app`, built
   directly into minikube's own Docker daemon (no registry needed locally).
 - **`postgres`** — PostgreSQL 16, backing the API's persistence layer.
 
-Both are exposed internally, wired together through a `ConfigMap` and a
-`Secret`, protected by liveness/readiness probes, autoscaled under CPU load,
-and reachable from outside the cluster only through an NGINX `Ingress` with
-TLS termination.
+Both are wired together through a `ConfigMap` and a `Secret`, protected by
+liveness/readiness probes, autoscaled under CPU load, and reachable from
+outside the cluster only through an NGINX `Ingress` with TLS termination.
+The whole stack installs and upgrades as one Helm release.
 
 > Redis and Nginx from the original Docker Compose stack are **not** part of
 > this Kubernetes setup — see [Known limitations](#known-limitations).
@@ -47,6 +49,7 @@ TLS termination.
 
 - [minikube](https://minikube.sigs.k8s.io/docs/start/)
 - `kubectl`
+- [Helm](https://helm.sh/docs/intro/install/) 3+
 - Docker
 - `openssl` (for the self-signed TLS certificate)
 
@@ -64,23 +67,19 @@ git clone https://github.com/SYRRUS-Ali/compose-multiservice-app.git
 docker build -t compose-multiservice-app-api:latest ./compose-multiservice-app/api
 
 # 3. Create your local Secret from the committed template
-cp manifests/secret.template.yaml manifests/secret.yaml
-# edit manifests/secret.yaml and replace the REPLACE_ME placeholders
+cp helm/k8s-deployment-demo/secret.template.yaml helm/k8s-deployment-demo/secret.yaml
+# edit helm/k8s-deployment-demo/secret.yaml and replace the REPLACE_ME placeholders
+kubectl apply -f helm/k8s-deployment-demo/secret.yaml
 
-# 4. Apply everything (order matters — Secret and ConfigMap first)
-kubectl apply -f manifests/secret.yaml
-kubectl apply -f manifests/configmap.yaml
-kubectl apply -f manifests/postgres.yaml
-kubectl apply -f manifests/api.yaml
-kubectl apply -f manifests/hpa.yaml
-kubectl apply -f manifests/ingress.yaml
-
-# 5. Generate a self-signed TLS cert and point a local hostname at it
+# 4. Generate a self-signed TLS cert and point a local hostname at it
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout certs/tls.key -out certs/tls.crt \
   -subj "/CN=k8s-deployment-demo.local/O=k8s-deployment-demo"
 kubectl create secret tls api-tls --cert=certs/tls.crt --key=certs/tls.key
 echo "$(minikube ip) k8s-deployment-demo.local" | sudo tee -a /etc/hosts
+
+# 5. Install the chart
+helm upgrade --install k8s-deployment-demo helm/k8s-deployment-demo
 
 # 6. Verify
 curl -k https://k8s-deployment-demo.local/health
@@ -93,15 +92,16 @@ Following the same `.env.example` / `.env` pattern used in
 
 | Source | Contains | Committed? |
 |---|---|---|
-| `manifests/configmap.yaml` | `LOG_LEVEL`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `CACHE_TTL_SECONDS`, `REDIS_URL`, `POSTGRES_USER`, `POSTGRES_DB` | ✅ Yes |
-| `manifests/secret.template.yaml` | Placeholder keys only (`POSTGRES_PASSWORD`, `JWT_SECRET_KEY`) | ✅ Yes |
-| `manifests/secret.yaml` | Real secret values | ❌ Git-ignored |
+| `helm/k8s-deployment-demo/values.yaml` | `LOG_LEVEL`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `CACHE_TTL_SECONDS`, `REDIS_URL`, `POSTGRES_USER`, `POSTGRES_DB` | ✅ Yes |
+| `helm/k8s-deployment-demo/secret.template.yaml` | Placeholder keys only (`POSTGRES_PASSWORD`, `JWT_SECRET_KEY`) | ✅ Yes |
+| `helm/k8s-deployment-demo/secret.yaml` | Real secret values | ❌ Git-ignored |
 
-`POSTGRES_USER` and `POSTGRES_DB` live in the `ConfigMap` and are referenced
-by **both** the `postgres` and `api` Deployments — a single source of truth,
-so the two can never drift out of sync. The API's `DATABASE_URL` is built
-dynamically from those values using Kubernetes' `$(VAR_NAME)` env
-interpolation rather than duplicating credentials as a literal string:
+`POSTGRES_USER` and `POSTGRES_DB` live in the `ConfigMap` (rendered from
+`values.yaml`) and are referenced by **both** the `postgres` and `api`
+Deployments — a single source of truth, so the two can never drift out of
+sync. The API's `DATABASE_URL` is built dynamically from those values using
+Kubernetes' `$(VAR_NAME)` env interpolation rather than duplicating
+credentials as a literal string:
 
 ```yaml
 - name: DATABASE_URL
@@ -157,9 +157,25 @@ front door on it), not two access methods running side by side.
   milestone, the API image is built directly into minikube's own Docker
   daemon (`eval $(minikube docker-env)`) with `imagePullPolicy: Never` —
   no registry round-trip needed for a single-node local cluster.
+- **The `Secret` is intentionally not managed by Helm.** The chart's
+  Deployments reference an existing Secret (`app-secret`) by name only —
+  Helm never sees or templates its values. This mirrors how secret
+  management is commonly separated from application deployment in real
+  clusters (e.g. via Vault or an External Secrets Operator), and keeps the
+  same `secret.template.yaml` (committed) / `secret.yaml` (git-ignored)
+  pattern already used before Helm was introduced, rather than reinventing
+  it inside `values.yaml`.
+- **`replicas` is omitted from the Deployment template when autoscaling is
+  enabled.** Helm and the HPA both want to control replica count; if the
+  chart always set a fixed `replicas`, every `helm upgrade` would silently
+  reset the pod count back to the value in `values.yaml`, undoing whatever
+  the HPA had scaled to. The template only sets `replicas` when
+  `api.autoscaling.enabled` is `false`, leaving Kubernetes' own HPA
+  controller as the sole source of truth otherwise.
 - **Kubernetes-recommended labels (`app.kubernetes.io/*`)** were added
-  across every manifest ahead of the Helm chart work, since Helm expects
-  and generates these labels by convention.
+  across every manifest before the Helm migration, since Helm expects and
+  generates these labels by convention — this made the templating pass
+  straightforward instead of retrofitting labels at the same time.
 
 ## Problems encountered and solved
 
@@ -179,12 +195,25 @@ history for exact context):
   Kubernetes' automatic restart-with-backoff recovers from this within
   seconds; the [health checks](#health-checks) added later exist
   specifically to manage this class of problem more gracefully.
-- **Stale ingress-nginx admission webhook.** After a `minikube stop`/
-  `start` cycle, `ingress-nginx`'s validating webhook occasionally stays
-  registered while its backing pod is still restarting, causing
-  `kubectl apply` on the Ingress to fail with a connection-refused error
-  from the webhook itself. Resolved by deleting and letting Kubernetes
-  re-register it: `kubectl delete validatingwebhookconfiguration ingress-nginx-admission`.
+- **Stale `ingress-nginx` admission webhook, twice, two different
+  symptoms.** After a `minikube stop`/`start` cycle, `ingress-nginx`'s
+  validating webhook has twice been left in a broken state while its
+  backing pod restarts — once as a plain connection-refused error, once as
+  an `x509: certificate signed by unknown authority` (its self-generated
+  internal TLS cert had gone out of sync with the pod actually serving it).
+  Both times, `kubectl apply`/`helm upgrade` on the Ingress failed until
+  resolving it the same way:
+  `kubectl delete validatingwebhookconfiguration ingress-nginx-admission`,
+  letting Kubernetes re-register a fresh one.
+- **A `.gitignore` path drifted during the Helm migration.** When
+  `secret.yaml` moved from `manifests/` to
+  `helm/k8s-deployment-demo/`, `.gitignore` still pointed at the old path
+  for one commit — long enough for `git add helm/` to accidentally stage
+  the real (local, throwaway-dev-value) secret file. Caught before
+  `git push` by reviewing `git status` and the commit diff, fixed with
+  `git rm --cached` and `git commit --amend` on the still-local commit.
+  Reinforces why every commit in this repo is checked with `git status`
+  immediately before pushing.
 
 ## Known limitations
 
@@ -209,13 +238,21 @@ history for exact context):
 
 ```
 k8s-deployment-demo/
-├── manifests/
-│   ├── configmap.yaml         # non-sensitive shared configuration
-│   ├── secret.template.yaml   # secret keys with placeholder values (committed)
-│   ├── postgres.yaml          # Deployment + Service
-│   ├── api.yaml               # Deployment + Service
-│   ├── hpa.yaml                # HorizontalPodAutoscaler
-│   └── ingress.yaml             # Ingress with TLS termination
+├── helm/
+│   └── k8s-deployment-demo/
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       ├── .helmignore
+│       ├── secret.template.yaml   # secret keys with placeholder values (committed)
+│       └── templates/
+│           ├── _helpers.tpl
+│           ├── configmap.yaml
+│           ├── postgres-deployment.yaml
+│           ├── postgres-service.yaml
+│           ├── api-deployment.yaml
+│           ├── api-service.yaml
+│           ├── hpa.yaml
+│           └── ingress.yaml
 ├── docs/
 │   ├── hpa-scale-up.png       # real autoscaling test, scale-up
 │   └── hpa-scale-down.png     # real autoscaling test, scale-down
@@ -236,7 +273,8 @@ k8s-deployment-demo/
 - [x] Horizontal Pod Autoscaler (tested with real synthetic load)
 - [x] Ingress with TLS termination
 - [x] Standardized Kubernetes-recommended labels
-- [ ] Helm chart packaging
+- [x] Helm chart packaging
+- [ ] Documented `helm install` / `upgrade` / `rollback` cycle
 - [ ] Persistent storage (PVC) for PostgreSQL
 - [ ] Final documentation and polish pass
 - [ ] `v1.0.0` tag
