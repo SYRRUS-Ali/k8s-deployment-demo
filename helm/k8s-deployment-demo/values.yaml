@@ -1,0 +1,57 @@
+nameOverride: ""
+
+api:
+  image:
+    repository: compose-multiservice-app-api
+    tag: latest
+    pullPolicy: Never
+  replicaCount: 1
+  service:
+    port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 50
+
+postgres:
+  image:
+    repository: postgres
+    tag: 16-alpine
+  service:
+    port: 5432
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+config:
+  logLevel: "INFO"
+  accessTokenExpireMinutes: "30"
+  cacheTtlSeconds: "60"
+  redisUrl: "redis://redis:6379/0"
+  postgresUser: "app_user"
+  postgresDb: "app_db"
+
+secretName: app-secret
+
+ingress:
+  enabled: true
+  className: nginx
+  host: k8s-deployment-demo.local
+  tlsSecretName: api-tls
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+labels:
+  instance: k8s-deployment-demo

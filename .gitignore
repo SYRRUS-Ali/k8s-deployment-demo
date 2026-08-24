@@ -7,5 +7,5 @@ minikube-linux-amd64
 .DS_Store
 *.swp
 
-manifests/secret.yaml
+helm/k8s-deployment-demo/secret.yaml
 certs/
