@@ -22,6 +22,7 @@ A production-style Kubernetes deployment of [`compose-multiservice-app`](https:/
 - [Autoscaling (HPA)](#autoscaling-hpa)
 - [Ingress and TLS](#ingress-and-tls)
 - [Design decisions](#design-decisions)
+- [Helm release lifecycle](#helm-release-lifecycle)
 - [Problems encountered and solved](#problems-encountered-and-solved)
 - [Known limitations](#known-limitations)
 - [Project structure](#project-structure)
@@ -177,6 +178,35 @@ front door on it), not two access methods running side by side.
   generates these labels by convention — this made the templating pass
   straightforward instead of retrofitting labels at the same time.
 
+## Helm release lifecycle
+
+The full `install` → `upgrade` → `rollback` cycle was tested end-to-end
+with a real, verifiable change (`maxReplicas` on the HPA: 4 → 6), not just
+run once and assumed to work:
+
+| Revision | Status | What happened |
+|---|---|---|
+| 1 | `superseded` (failed) | Initial `helm install` — failed on the Ingress due to a stale `ingress-nginx` admission webhook (see [Problems encountered](#problems-encountered-and-solved)) |
+| 2 | `superseded` (was `deployed`) | Retried after clearing the webhook — full stack live |
+| 3 | `failed` | `helm upgrade` (`maxReplicas: 4 → 6`) hit the *same* stale-webhook class of failure again on the Ingress — but see below |
+| 4 | `deployed` | `helm rollback k8s-deployment-demo 2` — confirmed `maxReplicas` back to 4 |
+
+**A partial-failure gotcha worth knowing:** revision 3's Ingress apply
+failed and Helm correctly marked the whole release `failed` — but
+`kubectl get hpa api` showed `MAXPODS: 6` regardless. Without
+[`--atomic`](https://helm.sh/docs/helm/helm_upgrade/), a `helm upgrade`
+applies resources as it goes; a failure partway through can leave the
+cluster in a state that doesn't match *any* single revision's intended
+manifest — some resources updated, others not — even though the release
+is labeled `failed`. `helm rollback` corrected this by re-applying
+revision 2's full manifest, not just "undoing" revision 3.
+
+**Also worth knowing:** `helm rollback` only affects the live cluster
+state — it does not touch `values.yaml` on disk. After rolling back, the
+file still read `maxReplicas: 6` and had to be reverted by hand to match
+what the cluster was actually running, to avoid the repo silently
+disagreeing with reality.
+
 ## Problems encountered and solved
 
 Real issues hit during this build, documented as they happened (see commit
@@ -214,7 +244,15 @@ history for exact context):
   `git rm --cached` and `git commit --amend` on the still-local commit.
   Reinforces why every commit in this repo is checked with `git status`
   immediately before pushing.
-
+- **A `helm upgrade` partial failure left the cluster ahead of the release
+  state.** During a controlled test of the upgrade/rollback cycle, the
+  `ingress-nginx` webhook issue above struck again mid-upgrade — Helm
+  marked the release `failed`, but the HPA's `maxReplicas` change had
+  already been applied to the live cluster before the failure. Recovered
+  with `helm rollback` to the last known-good revision; see
+  [Helm release lifecycle](#helm-release-lifecycle) for the full,
+  documented sequence.
+  
 ## Known limitations
 
 > Documented deliberately rather than hidden — see the same pattern in
@@ -274,7 +312,7 @@ k8s-deployment-demo/
 - [x] Ingress with TLS termination
 - [x] Standardized Kubernetes-recommended labels
 - [x] Helm chart packaging
-- [ ] Documented `helm install` / `upgrade` / `rollback` cycle
+- [x] Documented `helm install` / `upgrade` / `rollback` cycle
 - [ ] Persistent storage (PVC) for PostgreSQL
 - [ ] Final documentation and polish pass
 - [ ] `v1.0.0` tag
