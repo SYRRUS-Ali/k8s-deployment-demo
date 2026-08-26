@@ -27,6 +27,10 @@ postgres:
     tag: 16-alpine
   service:
     port: 5432
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClassName: standard
   resources:
     requests:
       cpu: 100m

@@ -1,0 +1,18 @@
+{{- if .Values.postgres.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    {{- include "k8s-deployment-demo.commonLabels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.postgres.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.postgres.persistence.size }}
+{{- end }}
