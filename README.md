@@ -5,7 +5,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
-A production-style Kubernetes deployment of [`compose-multiservice-app`](https://github.com/SYRRUS-Ali/compose-multiservice-app) — evolving a Docker Compose stack into a Kubernetes setup with externalized configuration, health checks, autoscaling, TLS-terminated ingress, and Helm packaging.
+A production-style Kubernetes deployment of [`compose-multiservice-app`](https://github.com/SYRRUS-Ali/compose-multiservice-app) — evolving a Docker Compose stack into a Kubernetes setup with externalized configuration, health checks, autoscaling, persistent storage, TLS-terminated ingress, and Helm packaging.
 
 > 🚧 **Status: in progress.** Built incrementally, one real commit per day, as
 > part of a structured DevSecOps portfolio sprint. See [Roadmap](#roadmap)
@@ -20,6 +20,7 @@ A production-style Kubernetes deployment of [`compose-multiservice-app`](https:/
 - [Configuration](#configuration)
 - [Health checks](#health-checks)
 - [Autoscaling (HPA)](#autoscaling-hpa)
+- [Persistent storage](#persistent-storage)
 - [Ingress and TLS](#ingress-and-tls)
 - [Design decisions](#design-decisions)
 - [Helm release lifecycle](#helm-release-lifecycle)
@@ -36,7 +37,8 @@ packaged as a single [Helm](https://helm.sh/) chart:
 
 - **`api`** — the FastAPI service from `compose-multiservice-app`, built
   directly into minikube's own Docker daemon (no registry needed locally).
-- **`postgres`** — PostgreSQL 16, backing the API's persistence layer.
+- **`postgres`** — PostgreSQL 16, backed by a `PersistentVolumeClaim` so
+  data survives pod restarts.
 
 Both are wired together through a `ConfigMap` and a `Secret`, protected by
 liveness/readiness probes, autoscaled under CPU load, and reachable from
@@ -137,6 +139,35 @@ between the load stopping and `REPLICAS` dropping back to 1):
 
 ![HPA scale down](docs/hpa-scale-down.png)
 
+## Persistent storage
+
+PostgreSQL is backed by a `PersistentVolumeClaim` (1Gi, `ReadWriteOnce`), so
+its data survives pod deletion, restarts, and rescheduling — instead of
+living only in the pod's ephemeral container filesystem.
+
+```yaml
+- name: PGDATA
+  value: /var/lib/postgresql/data/pgdata
+```
+
+`PGDATA` points to a *subdirectory* of the mount rather than the mount root.
+The official PostgreSQL image's documentation warns that some storage
+backends place a `lost+found` directory at a new volume's root, which makes
+PostgreSQL treat the directory as "not empty" and refuse to initialize —
+pointing `PGDATA` one level deeper avoids this entirely.
+
+**Verified with a real test, not just deployed and assumed to work:**
+
+1. Wrote a test row into PostgreSQL.
+2. Deleted the `postgres` pod entirely (`kubectl delete pod -l app=postgres`).
+3. Confirmed the replacement pod started and the row was still there.
+
+The same row also survived two subsequent `helm upgrade` attempts — one of
+which partially failed on the Ingress step, consistent with the pattern
+documented in [Helm release lifecycle](#helm-release-lifecycle) — confirming
+the PVC persists independently of both pod lifecycle and Helm release
+outcomes.
+
 ## Ingress and TLS
 
 The `api` Service is `ClusterIP` — it has no direct external exposure.
@@ -173,6 +204,11 @@ front door on it), not two access methods running side by side.
   the HPA had scaled to. The template only sets `replicas` when
   `api.autoscaling.enabled` is `false`, leaving Kubernetes' own HPA
   controller as the sole source of truth otherwise.
+- **`Deployment`, not `StatefulSet`, for PostgreSQL.** With a single
+  replica and no horizontal scaling planned for the database, a
+  `StatefulSet`'s main benefits (stable network identity, ordered
+  multi-replica scaling) don't apply here — a `Deployment` with a
+  `PersistentVolumeClaim` is simpler and sufficient for this milestone.
 - **Kubernetes-recommended labels (`app.kubernetes.io/*`)** were added
   across every manifest before the Helm migration, since Helm expects and
   generates these labels by convention — this made the templating pass
@@ -189,23 +225,27 @@ run once and assumed to work:
 | 1 | `superseded` (failed) | Initial `helm install` — failed on the Ingress due to a stale `ingress-nginx` admission webhook (see [Problems encountered](#problems-encountered-and-solved)) |
 | 2 | `superseded` (was `deployed`) | Retried after clearing the webhook — full stack live |
 | 3 | `failed` | `helm upgrade` (`maxReplicas: 4 → 6`) hit the *same* stale-webhook class of failure again on the Ingress — but see below |
-| 4 | `deployed` | `helm rollback k8s-deployment-demo 2` — confirmed `maxReplicas` back to 4 |
+| 4 | `superseded` (was `deployed`) | `helm rollback k8s-deployment-demo 2` — confirmed `maxReplicas` back to 4 |
+| 5 | `failed` | `helm upgrade` adding the PostgreSQL `PersistentVolumeClaim` — the *same* stale-webhook issue recurred a third time on the Ingress |
+| 6 | `deployed` | Retried after clearing the webhook again — PVC and Deployment changes confirmed live |
 
-**A partial-failure gotcha worth knowing:** revision 3's Ingress apply
-failed and Helm correctly marked the whole release `failed` — but
-`kubectl get hpa api` showed `MAXPODS: 6` regardless. Without
-[`--atomic`](https://helm.sh/docs/helm/helm_upgrade/), a `helm upgrade`
+**A partial-failure gotcha worth knowing:** in both revision 3 and revision
+5, the Ingress apply failed and Helm correctly marked the whole release
+`failed` — but the *other* resources in the same upgrade (the HPA's
+`maxReplicas`, and later the PVC and Deployment changes) had already been
+applied to the live cluster regardless. Without
+[`--atomic`](https://helm.sh/docs/helm/helm_upgrade/), `helm upgrade`
 applies resources as it goes; a failure partway through can leave the
 cluster in a state that doesn't match *any* single revision's intended
-manifest — some resources updated, others not — even though the release
-is labeled `failed`. `helm rollback` corrected this by re-applying
-revision 2's full manifest, not just "undoing" revision 3.
+manifest — some resources updated, others not — even though the release is
+labeled `failed`. This turned out to be a consistent, repeatable pattern
+tied specifically to the Ingress/webhook interaction, not a one-off.
 
 **Also worth knowing:** `helm rollback` only affects the live cluster
-state — it does not touch `values.yaml` on disk. After rolling back, the
-file still read `maxReplicas: 6` and had to be reverted by hand to match
-what the cluster was actually running, to avoid the repo silently
-disagreeing with reality.
+state — it does not touch `values.yaml` on disk. After rolling back
+revision 3, the file still read `maxReplicas: 6` and had to be reverted by
+hand to match what the cluster was actually running, to avoid the repo
+silently disagreeing with reality.
 
 ## Problems encountered and solved
 
@@ -225,16 +265,19 @@ history for exact context):
   Kubernetes' automatic restart-with-backoff recovers from this within
   seconds; the [health checks](#health-checks) added later exist
   specifically to manage this class of problem more gracefully.
-- **Stale `ingress-nginx` admission webhook, twice, two different
-  symptoms.** After a `minikube stop`/`start` cycle, `ingress-nginx`'s
-  validating webhook has twice been left in a broken state while its
-  backing pod restarts — once as a plain connection-refused error, once as
-  an `x509: certificate signed by unknown authority` (its self-generated
-  internal TLS cert had gone out of sync with the pod actually serving it).
-  Both times, `kubectl apply`/`helm upgrade` on the Ingress failed until
-  resolving it the same way:
+- **Stale `ingress-nginx` admission webhook — recurred three times, two
+  distinct symptoms.** After a `minikube stop`/`start` cycle, or sometimes
+  even a routine `helm upgrade`, `ingress-nginx`'s validating webhook has
+  repeatedly been left in a broken state while its backing pod restarts —
+  as a plain connection-refused error, and as an
+  `x509: certificate signed by unknown authority` (its self-generated
+  internal TLS cert going out of sync with the pod actually serving it).
+  Every time, the fix has been the same:
   `kubectl delete validatingwebhookconfiguration ingress-nginx-admission`,
-  letting Kubernetes re-register a fresh one.
+  letting Kubernetes re-register a fresh one. Each occurrence also
+  demonstrated the same partial-failure behavior described in
+  [Helm release lifecycle](#helm-release-lifecycle) — the non-Ingress parts
+  of the upgrade succeeded regardless.
 - **A `.gitignore` path drifted during the Helm migration.** When
   `secret.yaml` moved from `manifests/` to
   `helm/k8s-deployment-demo/`, `.gitignore` still pointed at the old path
@@ -244,15 +287,7 @@ history for exact context):
   `git rm --cached` and `git commit --amend` on the still-local commit.
   Reinforces why every commit in this repo is checked with `git status`
   immediately before pushing.
-- **A `helm upgrade` partial failure left the cluster ahead of the release
-  state.** During a controlled test of the upgrade/rollback cycle, the
-  `ingress-nginx` webhook issue above struck again mid-upgrade — Helm
-  marked the release `failed`, but the HPA's `maxReplicas` change had
-  already been applied to the live cluster before the failure. Recovered
-  with `helm rollback` to the last known-good revision; see
-  [Helm release lifecycle](#helm-release-lifecycle) for the full,
-  documented sequence.
-  
+
 ## Known limitations
 
 > Documented deliberately rather than hidden — see the same pattern in
@@ -260,9 +295,6 @@ history for exact context):
 
 - **Self-signed TLS certificate.** Fine for local development; a real
   deployment would use a CA-issued certificate (e.g. via `cert-manager`).
-- **No persistent storage yet.** PostgreSQL data does not survive a pod
-  restart or deletion — a `PersistentVolumeClaim` is on the
-  [roadmap](#roadmap) but not yet implemented.
 - **Secret values are base64, not encrypted.** Kubernetes `Secret`s are
   base64-encoded, not encrypted by default — real protection requires
   RBAC restrictions and encryption-at-rest at the cluster level, which is
@@ -271,6 +303,9 @@ history for exact context):
   Redis cache-aside layer is intentionally out of scope for this
   Kubernetes milestone; cache-dependent endpoints work in the Docker
   Compose version but are not required for this deployment's health check.
+- **Single PostgreSQL replica, no backup strategy.** The PVC protects
+  against pod loss, not against volume-level failure — a real deployment
+  would add scheduled backups (e.g. `pg_dump` to external storage) on top.
 
 ## Project structure
 
@@ -287,6 +322,7 @@ k8s-deployment-demo/
 │           ├── configmap.yaml
 │           ├── postgres-deployment.yaml
 │           ├── postgres-service.yaml
+│           ├── postgres-pvc.yaml
 │           ├── api-deployment.yaml
 │           ├── api-service.yaml
 │           ├── hpa.yaml
@@ -313,7 +349,7 @@ k8s-deployment-demo/
 - [x] Standardized Kubernetes-recommended labels
 - [x] Helm chart packaging
 - [x] Documented `helm install` / `upgrade` / `rollback` cycle
-- [ ] Persistent storage (PVC) for PostgreSQL
+- [x] Persistent storage (PVC) for PostgreSQL
 - [ ] Final documentation and polish pass
 - [ ] `v1.0.0` tag
 
