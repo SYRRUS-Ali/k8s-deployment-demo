@@ -1,0 +1,126 @@
+<svg viewBox="0 0 900 800" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="800" fill="#ffffff"/>
+  <text x="450" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#0f172a">k8s-deployment-demo — architecture</text>
+
+  <!-- Client -->
+  <rect x="340" y="55" width="220" height="46" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+  <text x="450" y="83" text-anchor="middle" font-size="14" fill="#1e293b">Client (browser / curl)</text>
+
+  <line x1="450" y1="101" x2="450" y2="136" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="465" y="123" font-size="11" fill="#475569">HTTPS :443</text>
+
+  <!-- Ingress -->
+  <rect x="300" y="138" width="300" height="54" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="450" y="160" text-anchor="middle" font-size="13" font-weight="700" fill="#4c1d95">Ingress: api</text>
+  <text x="450" y="177" text-anchor="middle" font-size="11" fill="#4c1d95">nginx · TLS termination (self-signed)</text>
+
+  <line x1="450" y1="192" x2="450" y2="222" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- api Service -->
+  <rect x="300" y="224" width="300" height="46" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="450" y="247" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a8a">Service: api</text>
+  <text x="450" y="263" text-anchor="middle" font-size="11" fill="#1e3a8a">ClusterIP :8000</text>
+
+  <line x1="450" y1="270" x2="450" y2="300" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- api Deployment -->
+  <rect x="270" y="302" width="360" height="110" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="6 3"/>
+  <text x="450" y="322" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a8a">Deployment: api</text>
+  <text x="450" y="337" text-anchor="middle" font-size="10.5" fill="#1e3a8a">readiness/liveness: GET /health</text>
+  <rect x="300" y="350" width="70" height="40" rx="6" fill="#eff6ff" stroke="#3b82f6"/>
+  <text x="335" y="374" text-anchor="middle" font-size="10" fill="#1e3a8a">pod</text>
+  <rect x="390" y="350" width="70" height="40" rx="6" fill="#eff6ff" stroke="#3b82f6"/>
+  <text x="425" y="374" text-anchor="middle" font-size="10" fill="#1e3a8a">pod</text>
+  <text x="490" y="374" font-size="16" fill="#3b82f6">···</text>
+  <text x="450" y="400" text-anchor="middle" font-size="10" fill="#1e3a8a">1–4 replicas</text>
+
+  <!-- HPA -->
+  <rect x="670" y="322" width="180" height="70" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="760" y="343" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">HorizontalPodAutoscaler</text>
+  <text x="760" y="359" text-anchor="middle" font-size="10.5" fill="#92400e">target: 50% CPU</text>
+  <text x="760" y="374" text-anchor="middle" font-size="10.5" fill="#92400e">min 1 · max 4</text>
+  <line x1="670" y1="357" x2="632" y2="357" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrowAmber)"/>
+  <text x="638" y="349" font-size="9.5" fill="#92400e">scales</text>
+
+  <!-- ConfigMap -->
+  <rect x="30" y="300" width="190" height="46" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="125" y="319" text-anchor="middle" font-size="12.5" font-weight="700" fill="#14532d">ConfigMap</text>
+  <text x="125" y="335" text-anchor="middle" font-size="10.5" fill="#14532d">app-config</text>
+
+  <!-- Secret -->
+  <rect x="30" y="360" width="190" height="46" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+  <text x="125" y="379" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7f1d1d">Secret</text>
+  <text x="125" y="395" text-anchor="middle" font-size="10.5" fill="#7f1d1d">app-secret (not Helm-managed)</text>
+
+  <!-- ConfigMap/Secret -> api Deployment -->
+  <line x1="220" y1="315" x2="272" y2="335" stroke="#16a34a" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrowGreen)"/>
+  <line x1="220" y1="383" x2="272" y2="365" stroke="#dc2626" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrowRed)"/>
+
+  <line x1="450" y1="412" x2="450" y2="442" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="465" y="432" font-size="10.5" fill="#475569">DATABASE_URL</text>
+
+  <!-- postgres Service -->
+  <rect x="300" y="444" width="300" height="46" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="450" y="463" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a8a">Service: postgres</text>
+  <text x="450" y="479" text-anchor="middle" font-size="11" fill="#1e3a8a">ClusterIP :5432</text>
+
+  <line x1="450" y1="490" x2="450" y2="520" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- postgres Deployment -->
+  <rect x="300" y="522" width="300" height="70" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="450" y="544" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a8a">Deployment: postgres</text>
+  <text x="450" y="560" text-anchor="middle" font-size="10.5" fill="#1e3a8a">1 replica · readiness/liveness: pg_isready</text>
+  <text x="450" y="576" text-anchor="middle" font-size="10.5" fill="#1e3a8a">PGDATA=/var/lib/postgresql/data/pgdata</text>
+
+  <!-- ConfigMap/Secret -> postgres Deployment -->
+  <line x1="220" y1="330" x2="298" y2="540" stroke="#16a34a" stroke-width="1.1" stroke-dasharray="4 3" marker-end="url(#arrowGreen)" opacity="0.75"/>
+  <line x1="220" y1="390" x2="298" y2="555" stroke="#dc2626" stroke-width="1.1" stroke-dasharray="4 3" marker-end="url(#arrowRed)" opacity="0.75"/>
+
+  <line x1="450" y1="592" x2="450" y2="622" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="463" y="612" font-size="10.5" fill="#475569">mounts</text>
+
+  <!-- PVC -->
+  <rect x="300" y="624" width="300" height="46" rx="8" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.5"/>
+  <text x="450" y="643" text-anchor="middle" font-size="13" font-weight="700" fill="#134e4a">PersistentVolumeClaim</text>
+  <text x="450" y="659" text-anchor="middle" font-size="11" fill="#134e4a">postgres-data · 1Gi · RWO</text>
+
+  <line x1="450" y1="670" x2="450" y2="700" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="465" y="690" font-size="10.5" fill="#475569">bound to</text>
+
+  <!-- PV -->
+  <rect x="300" y="702" width="300" height="46" rx="8" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.5"/>
+  <text x="450" y="721" text-anchor="middle" font-size="13" font-weight="700" fill="#134e4a">PersistentVolume</text>
+  <text x="450" y="737" text-anchor="middle" font-size="11" fill="#134e4a">provisioned by minikube storage-provisioner</text>
+
+  <!-- Legend -->
+  <text x="670" y="440" font-size="10.5" font-weight="700" fill="#334155">Legend</text>
+  <rect x="670" y="450" width="14" height="14" fill="#ede9fe" stroke="#7c3aed"/>
+  <text x="690" y="461" font-size="10" fill="#334155">Ingress / TLS</text>
+  <rect x="670" y="470" width="14" height="14" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="690" y="481" font-size="10" fill="#334155">Service / Deployment</text>
+  <rect x="670" y="490" width="14" height="14" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="690" y="501" font-size="10" fill="#334155">ConfigMap (non-sensitive)</text>
+  <rect x="670" y="510" width="14" height="14" fill="#fee2e2" stroke="#dc2626"/>
+  <text x="690" y="521" font-size="10" fill="#334155">Secret (not Helm-managed)</text>
+  <rect x="670" y="530" width="14" height="14" fill="#fef3c7" stroke="#d97706"/>
+  <text x="690" y="541" font-size="10" fill="#334155">Autoscaler</text>
+  <rect x="670" y="550" width="14" height="14" fill="#ccfbf1" stroke="#0d9488"/>
+  <text x="690" y="561" font-size="10" fill="#334155">Persistent storage</text>
+
+  <text x="450" y="785" text-anchor="middle" font-size="10.5" fill="#94a3b8">The entire stack above installs and upgrades as one Helm release: k8s-deployment-demo</text>
+</svg>

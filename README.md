@@ -15,6 +15,7 @@ A production-style Kubernetes deployment of [`compose-multiservice-app`](https:/
 ## Table of contents
 
 - [What this deploys](#what-this-deploys)
+- [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
@@ -47,6 +48,17 @@ The whole stack installs and upgrades as one Helm release.
 
 > Redis and Nginx from the original Docker Compose stack are **not** part of
 > this Kubernetes setup — see [Known limitations](#known-limitations).
+
+## Architecture
+
+![Architecture diagram](docs/architecture.svg)
+
+Request flow: `Client → Ingress (TLS) → Service: api → Deployment: api`,
+scaled by the `HorizontalPodAutoscaler` and configured from the
+`ConfigMap`/`Secret`, talking to `Service: postgres → Deployment: postgres`,
+backed by a `PersistentVolumeClaim`. Every resource in the diagram installs
+and upgrades as one Helm release, with the sole exception of the `Secret`
+(see [Design decisions](#design-decisions) for why).
 
 ## Prerequisites
 
@@ -328,6 +340,7 @@ k8s-deployment-demo/
 │           ├── hpa.yaml
 │           └── ingress.yaml
 ├── docs/
+│   ├── architecture.svg       # full request-flow / component diagram
 │   ├── hpa-scale-up.png       # real autoscaling test, scale-up
 │   └── hpa-scale-down.png     # real autoscaling test, scale-down
 ├── sandbox/
@@ -350,7 +363,7 @@ k8s-deployment-demo/
 - [x] Helm chart packaging
 - [x] Documented `helm install` / `upgrade` / `rollback` cycle
 - [x] Persistent storage (PVC) for PostgreSQL
-- [ ] Final documentation and polish pass
+- [x] Final documentation and polish pass
 - [ ] `v1.0.0` tag
 
 ## License
