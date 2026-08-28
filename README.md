@@ -3,14 +3,14 @@
 [![Kubernetes](https://img.shields.io/badge/kubernetes-ready-326CE5.svg?logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![Helm](https://img.shields.io/badge/helm-chart-0F1689.svg?logo=helm&logoColor=white)](https://helm.sh/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Release](https://img.shields.io/github/v/tag/SYRRUS-Ali/k8s-deployment-demo)](https://github.com/SYRRUS-Ali/k8s-deployment-demo/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 A production-style Kubernetes deployment of [`compose-multiservice-app`](https://github.com/SYRRUS-Ali/compose-multiservice-app) — evolving a Docker Compose stack into a Kubernetes setup with externalized configuration, health checks, autoscaling, persistent storage, TLS-terminated ingress, and Helm packaging.
 
-> 🚧 **Status: in progress.** Built incrementally, one real commit per day, as
-> part of a structured DevSecOps portfolio sprint. See [Roadmap](#roadmap)
-> for what's done and what's next — this README is updated as the project
-> grows, not written after the fact.
+> ✅ **Status: complete — v1.0.0.** Built incrementally, one real commit per
+> day, as part of a structured DevSecOps portfolio sprint. See
+> [Roadmap](#roadmap) for the full day-by-day history of what was built.
 
 ## Table of contents
 
@@ -318,6 +318,10 @@ history for exact context):
 - **Single PostgreSQL replica, no backup strategy.** The PVC protects
   against pod loss, not against volume-level failure — a real deployment
   would add scheduled backups (e.g. `pg_dump` to external storage) on top.
+- **API image tagged `latest`, not version-pinned.** Fine for local
+  iterative development where the image is rebuilt from source each time,
+  but a real deployment pipeline should build and push immutable,
+  version-pinned tags (e.g. a git SHA or semver) instead.
 
 ## Project structure
 
@@ -364,7 +368,7 @@ k8s-deployment-demo/
 - [x] Documented `helm install` / `upgrade` / `rollback` cycle
 - [x] Persistent storage (PVC) for PostgreSQL
 - [x] Final documentation and polish pass
-- [ ] `v1.0.0` tag
+- [x] `v1.0.0` tag
 
 ## License
 
